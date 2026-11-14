@@ -151,8 +151,12 @@ export async function assessAnimal(input: AssessInput): Promise<Assessment> {
         systemInstruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: "user", parts }],
         generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: SCHEMA,
+          responseFormat: {
+            text: {
+              mimeType: "APPLICATION_JSON",
+              schema: SCHEMA,
+            },
+          },
           temperature: 0.2,
         },
       }),
@@ -165,14 +169,30 @@ export async function assessAnimal(input: AssessInput): Promise<Assessment> {
   }
 
   if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      error?: { message?: string; status?: string };
+    } | null;
+    const providerMessage = body?.error?.message;
+    console.error(
+      `[AI] Gemini returned HTTP ${response.status}${body?.error?.status ? ` (${body.error.status})` : ""}: ${providerMessage ?? "No error details returned."}`,
+    );
     if (response.status === 429) {
-      throw new Error("The AI assistant is busy right now. Please try again in a minute.");
+      throw new Error(
+        "Gemini quota or rate limit reached. Check the API quota in Google AI Studio.",
+      );
     }
-    console.error(`[AI] Gemini returned HTTP ${response.status}.`);
     if (response.status === 401 || response.status === 403) {
       throw new Error(
-        "Gemini rejected the API key. Check GEMINI_API_KEY in the server environment.",
+        "Gemini rejected the API key or the API is disabled. Check GEMINI_API_KEY and the Google AI Studio project.",
       );
+    }
+    if (response.status === 400) {
+      throw new Error(
+        "Gemini rejected the assessment request. Check the Gemini model and response format configuration.",
+      );
+    }
+    if (response.status === 404) {
+      throw new Error("The configured Gemini model was not found. Check the model name.");
     }
     throw new Error(
       "The Gemini AI service is temporarily unavailable. Please try again or contact a veterinarian.",
