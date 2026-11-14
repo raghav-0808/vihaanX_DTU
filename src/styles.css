@@ -1,0 +1,93 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * JeevRakshak design system.
+ * Cream paper background, deep forest green, warm gold accent.
+ * Playfair Display (editorial), Manrope (body), DM Mono (labels).
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: "Playfair Display", Georgia, serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.9rem;
+  --background: oklch(0.966 0.017 88);
+  --foreground: oklch(0.33 0.03 162);
+  --card: oklch(0.985 0.009 90);
+  --card-foreground: oklch(0.33 0.03 162);
+  --popover: oklch(0.985 0.009 90);
+  --popover-foreground: oklch(0.33 0.03 162);
+  --primary: oklch(0.325 0.062 165);
+  --primary-foreground: oklch(0.972 0.017 88);
+  --secondary: oklch(0.925 0.022 140);
+  --secondary-foreground: oklch(0.325 0.062 165);
+  --muted: oklch(0.935 0.014 90);
+  --muted-foreground: oklch(0.52 0.022 158);
+  --accent: oklch(0.918 0.028 150);
+  --accent-foreground: oklch(0.325 0.062 165);
+  --gold: oklch(0.635 0.096 72);
+  --gold-foreground: oklch(0.26 0.05 70);
+  --destructive: oklch(0.505 0.157 27);
+  --destructive-foreground: oklch(0.98 0.01 90);
+  --border: oklch(0.895 0.016 92);
+  --input: oklch(0.895 0.016 92);
+  --ring: oklch(0.325 0.062 165);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@utility font-editorial {
+  font-family: var(--font-editorial);
+}
+
+@utility paper-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px);
+  background-size: 46px 46px;
+}
