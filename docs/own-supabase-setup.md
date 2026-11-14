@@ -35,8 +35,7 @@ end to end.
 ## Local environment
 
 Copy `.env.example` to `.env` and configure the Supabase URL, publishable key,
-server-only service role key, and either `LOVABLE_API_KEY` or local Ollama
-settings for AI assessments. Keep
+server-only service role key, and `GEMINI_API_KEY` for AI assessments. Keep
 `.env` private. The Drizzle migration connection string is needed only when
 applying migrations. Public registrations receive the owner role; a trusted
 administrator must grant veterinarian access.
@@ -47,12 +46,11 @@ that project's Supabase dashboard (Project Settings → API). If reports fail
 with a Storage network error, confirm the URL hostname resolves and the project
 is active before retrying.
 
-For local keyless AI, install Ollama, run `ollama run qwen2.5vl:3b` once to
-download the vision model, then set `OLLAMA_BASE_URL=http://127.0.0.1:11434`
-and `OLLAMA_VISION_MODEL=qwen2.5vl:3b` in `.env`. The app uses Ollama when this
-URL is set and sends image data to its local chat API. The model download is
-several GB. This localhost configuration works for development on the same
-machine; a deployed app needs a private Ollama service reachable by its server.
+Create a Gemini API key in Google AI Studio and set it as `GEMINI_API_KEY` in
+your local `.env` and in Vercel's server-side environment variables. Keep the
+key private and do not use a `VITE_` prefix. Gemini handles both symptom text
+and optional animal photos. The same hosted Gemini API works in local and
+deployed environments.
 
 ## Existing data
 

@@ -1,13 +1,12 @@
 import { z } from "zod";
 
 /**
- * Server-only veterinary AI assessment through the Lovable AI Gateway.
+ * Server-only veterinary AI assessment through the Gemini API.
  * Never import this from client code.
  */
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/responses";
-const MODEL = "openai/gpt-6-astra";
-const DEFAULT_OLLAMA_MODEL = "qwen2.5vl:3b";
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 export interface Assessment {
   animal_observed: string;
@@ -22,7 +21,6 @@ export interface Assessment {
 
 const SCHEMA = {
   type: "object",
-  additionalProperties: false,
   required: [
     "animal_observed",
     "condition_summary",
@@ -40,7 +38,6 @@ const SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        additionalProperties: false,
         required: ["name", "reasoning", "confidence"],
         properties: {
           name: { type: "string" },
@@ -110,65 +107,53 @@ export interface AssessInput {
 }
 
 export async function assessAnimal(input: AssessInput): Promise<Assessment> {
-  const parts: Record<string, unknown>[] = [
-    {
-      type: "input_text",
-      text: [
-        input.species ? `Animal / species: ${input.species}` : "Animal / species: not stated",
-        `What the person reports: ${input.description}`,
-        input.extraContext ? `Additional record context: ${input.extraContext}` : "",
-        input.imageDataUrl
-          ? "A photo of the animal is attached — describe what you can actually see in it."
-          : "No photo was provided.",
-        "Give a preliminary triage assessment as JSON matching the schema.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    },
-  ];
-  if (input.imageDataUrl) {
-    const url = input.imageDataUrl.startsWith("data:")
-      ? input.imageDataUrl
-      : `data:image/jpeg;base64,${input.imageDataUrl}`;
-    parts.push({ type: "input_image", image_url: url });
-  }
-
-  const ollamaUrl = process.env["OLLAMA_BASE_URL"]?.replace(/\/+$/, "");
-  if (ollamaUrl) {
-    return assessWithOllama(input, String(parts[0]?.["text"] ?? ""), ollamaUrl);
-  }
-
-  const apiKey = process.env["LOVABLE_API_KEY"];
+  const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) {
-    throw new Error(
-      "AI is not configured. Set OLLAMA_BASE_URL for a local Ollama vision model or configure LOVABLE_API_KEY.",
-    );
+    throw new Error("AI is not configured. Add GEMINI_API_KEY to the server environment.");
   }
 
-  let res: Response;
+  const prompt = [
+    input.species ? `Animal / species: ${input.species}` : "Animal / species: not stated",
+    `What the person reports: ${input.description}`,
+    input.extraContext ? `Additional record context: ${input.extraContext}` : "",
+    input.imageDataUrl
+      ? "A photo of the animal is attached — describe what you can actually see in it."
+      : "No photo was provided.",
+    "Give a preliminary triage assessment as JSON matching the schema.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const parts: Record<string, unknown>[] = [{ text: prompt }];
+
+  if (input.imageDataUrl) {
+    const dataUrlMatch = input.imageDataUrl.match(/^data:([^;,]+);base64,([\s\S]*)$/);
+    if (input.imageDataUrl.startsWith("data:") && !dataUrlMatch) {
+      throw new Error("The attached image must be a base64-encoded data URL.");
+    }
+    parts.push({
+      inlineData: {
+        mimeType: dataUrlMatch?.[1] ?? "image/jpeg",
+        data: dataUrlMatch?.[2] ?? input.imageDataUrl,
+      },
+    });
+  }
+
+  let response: Response;
   try {
-    res = await fetch(GATEWAY, {
+    response = await fetch(GEMINI_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-        "X-Lovable-AIG-SDK": "fetch",
+        "x-goog-api-key": apiKey,
       },
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(90_000),
       body: JSON.stringify({
-        model: MODEL,
-        stream: true,
-        instructions: SYSTEM,
-        input: [{ role: "user", content: parts }],
-        reasoning: { effort: "low", summary: "auto" },
-        store: false,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "veterinary_assessment",
-            strict: true,
-            schema: SCHEMA,
-          },
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: SCHEMA,
+          temperature: 0.2,
         },
       }),
     });
@@ -176,139 +161,42 @@ export async function assessAnimal(input: AssessInput): Promise<Assessment> {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
       throw new Error("AI assessment timed out. Please try again.");
     }
-    throw new Error(
-      "The AI assessment service could not be reached. Check your connection and try again.",
-    );
+    throw new Error("The Gemini AI service could not be reached. Please try again.");
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    if (res.status === 429)
+  if (!response.ok) {
+    if (response.status === 429) {
       throw new Error("The AI assistant is busy right now. Please try again in a minute.");
-    if (res.status === 402)
-      throw new Error("AI credits for this app have run out. The app owner needs to add credits.");
-    console.error(`[AI] Assessment provider returned HTTP ${res.status}.`);
+    }
+    console.error(`[AI] Gemini returned HTTP ${response.status}.`);
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        "Gemini rejected the API key. Check GEMINI_API_KEY in the server environment.",
+      );
+    }
     throw new Error(
-      "The AI assessment service is temporarily unavailable. Please try again or contact a veterinarian.",
+      "The Gemini AI service is temporarily unavailable. Please try again or contact a veterinarian.",
     );
   }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("AI assessment returned no response.");
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-  let streamError: string | null = null;
-
-  function consumeEvent(line: string) {
-    if (!line.startsWith("data:")) return;
-    const payload = line.slice(5).trim();
-    if (!payload || payload === "[DONE]") return;
-    try {
-      const evt = JSON.parse(payload) as {
-        type?: string;
-        delta?: string;
-        response?: { output_text?: string; error?: { message?: string } };
-        error?: { message?: string };
-      };
-      if (evt.type === "response.output_text.delta" && typeof evt.delta === "string") {
-        text += evt.delta;
-      } else if (evt.type === "response.completed" && evt.response?.output_text && !text) {
-        text = evt.response.output_text;
-      } else if (evt.type === "error" || evt.type === "response.failed") {
-        streamError =
-          evt.error?.message ??
-          evt.response?.error?.message ??
-          "AI provider failed to complete the assessment.";
-      }
-    } catch {
-      // Ignore incomplete or keep-alive frames; the final partial frame is parsed below.
-    }
-  }
-
+  let payload: {
+    candidates?: { content?: { parts?: { text?: unknown }[] } }[];
+  };
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) consumeEvent(line);
-    }
-  } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-      throw new Error("AI assessment timed out. Please try again.");
-    }
-    throw new Error("The AI assessment stream was interrupted. Please try again.");
+    payload = (await response.json()) as typeof payload;
+  } catch {
+    throw new Error("Gemini returned an unreadable response. Please try again.");
   }
-  if (buffer.trim()) consumeEvent(buffer.trim());
-  if (streamError)
-    throw new Error("The AI assessment service could not complete this request. Please try again.");
 
-  if (!text.trim())
-    throw new Error("The AI assistant could not produce an assessment. Please try again.");
+  const text =
+    payload.candidates?.[0]?.content?.parts
+      ?.map((part) => (typeof part.text === "string" ? part.text : ""))
+      .join("") ?? "";
+  if (!text.trim()) throw new Error("Gemini could not produce an assessment. Please try again.");
 
   try {
     return AssessmentSchema.parse(JSON.parse(extractJson(text)));
   } catch {
-    throw new Error("The AI assistant returned an unreadable answer. Please try again.");
-  }
-}
-
-async function assessWithOllama(
-  input: AssessInput,
-  prompt: string,
-  baseUrl: string,
-): Promise<Assessment> {
-  const model = process.env["OLLAMA_VISION_MODEL"] || DEFAULT_OLLAMA_MODEL;
-  const images = input.imageDataUrl
-    ? [
-        input.imageDataUrl.startsWith("data:")
-          ? (input.imageDataUrl.split(",", 2)[1] ?? "")
-          : input.imageDataUrl,
-      ]
-    : undefined;
-
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(180_000),
-      body: JSON.stringify({
-        model,
-        stream: false,
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: prompt, ...(images ? { images } : {}) },
-        ],
-        format: SCHEMA,
-        options: { temperature: 0 },
-      }),
-    });
-  } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-      throw new Error("The local AI model took too long. Try again or use a smaller Ollama model.");
-    }
-    throw new Error(
-      `Cannot reach Ollama at ${baseUrl}. Start Ollama and ensure the ${model} model is installed.`,
-    );
-  }
-
-  if (!response.ok) {
-    console.error(`[AI] Local Ollama returned HTTP ${response.status}.`);
-    throw new Error(
-      `The local AI model could not complete this assessment. Check that Ollama is running and the ${model} model is installed.`,
-    );
-  }
-
-  try {
-    const payload = (await response.json()) as { message?: { content?: unknown } };
-    if (typeof payload.message?.content !== "string" || !payload.message.content.trim()) {
-      throw new Error("Empty AI response");
-    }
-    return AssessmentSchema.parse(JSON.parse(extractJson(payload.message.content)));
-  } catch {
-    throw new Error("The local AI model returned an unreadable assessment. Please try again.");
+    throw new Error("Gemini returned an unreadable assessment. Please try again.");
   }
 }
