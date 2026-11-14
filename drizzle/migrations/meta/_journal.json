@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789055988093,
+      "tag": "0000_create_profiles_and_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789056558840,
+      "tag": "0001_create_animals_records_cases",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789056597453,
+      "tag": "0002_animal_photos_storage_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794660565000,
+      "tag": "0003_restrict_public_signup_role",
+      "breakpoints": true
+    }
+  ]
+}
