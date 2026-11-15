@@ -5,8 +5,8 @@ import { z } from "zod";
  * Never import this from client code.
  */
 
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export interface Assessment {
   animal_observed: string;
@@ -192,7 +192,9 @@ export async function assessAnimal(input: AssessInput): Promise<Assessment> {
       );
     }
     if (response.status === 404) {
-      throw new Error("The configured Gemini model was not found. Check the model name.");
+      throw new Error(
+        `Gemini model ${GEMINI_MODEL} was not found or is unavailable to this API key. Check that the Gemini API is enabled for its Google Cloud project.`,
+      );
     }
     throw new Error(
       "The Gemini AI service is temporarily unavailable. Please try again or contact a veterinarian.",
